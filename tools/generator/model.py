@@ -213,6 +213,8 @@ class Api:
     typedefs: tuple[Typedef, ...]
     opaques: tuple[Opaque, ...] = ()
     macros: tuple[Macro, ...] = ()
+    # Interfaces whose versions init asks the Steam client to support, in the SDK's order.
+    init_interfaces: tuple[str, ...] = ()
 
     @property
     def callbacks(self) -> tuple[Struct, ...]:

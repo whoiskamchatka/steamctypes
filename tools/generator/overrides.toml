@@ -18,6 +18,35 @@ flag_enums = [
     "ISteamHTMLSurface::EHTMLKeyModifiers",
 ]
 
+# The interfaces whose versions SteamAPI_InitEx in steam_api.h asks the Steam client to support,
+# in the header's order.
+init_interfaces = [
+    "ISteamUtils",
+    "ISteamNetworkingUtils",
+    "ISteamApps",
+    "ISteamController",
+    "ISteamFriends",
+    "ISteamHTMLSurface",
+    "ISteamHTTP",
+    "ISteamInput",
+    "ISteamInventory",
+    "ISteamMatchmakingServers",
+    "ISteamMatchmaking",
+    "ISteamMusic",
+    "ISteamNetworkingMessages",
+    "ISteamNetworkingSockets",
+    "ISteamNetworking",
+    "ISteamParentalSettings",
+    "ISteamParties",
+    "ISteamRemotePlay",
+    "ISteamRemoteStorage",
+    "ISteamScreenshots",
+    "ISteamUGC",
+    "ISteamUserStats",
+    "ISteamUser",
+    "ISteamVideo",
+]
+
 # Types the JSON uses but never defines.
 
 # 8-byte classes declared under pack(1) in the headers. The flat API passes them by value as uint64.

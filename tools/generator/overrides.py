@@ -27,7 +27,16 @@ from tools.generator.model import (
 
 OVERRIDES_PATH = Path(__file__).with_name("overrides.toml")
 SECTIONS = frozenset(
-    {"flag_enums", "macros", "pack", "types", "unions", "annotations", "unsupported"}
+    {
+        "flag_enums",
+        "init_interfaces",
+        "macros",
+        "pack",
+        "types",
+        "unions",
+        "annotations",
+        "unsupported",
+    }
 )
 
 
@@ -61,6 +70,7 @@ class _Applier:
         self.new_typedefs: list[Typedef] = []
         self.opaques: list[Opaque] = []
         self.macros: list[Macro] = []
+        self.init_interfaces: list[str] = []
 
     def table(
         self,
@@ -247,6 +257,21 @@ class _Applier:
             else:
                 self.interfaces[name] = replace(interface, unsupported=str(reason))
 
+    def init_interface_names(self, names: object) -> None:
+        if not isinstance(names, list):
+            self.problems.append("init_interfaces: expected a list of interface names")
+            return
+        for name in cast(list[Any], names):
+            interface = self.interfaces.get(name)
+            if interface is None:
+                self.problems.append(f"init_interfaces: no interface {name} in steam_api.json")
+            elif interface.version is None:
+                self.problems.append(f"init_interfaces: {name} has no version string")
+            elif name in self.init_interfaces:
+                self.problems.append(f"init_interfaces: {name} is listed twice")
+            else:
+                self.init_interfaces.append(name)
+
     def result(self) -> Api:
         return replace(
             self.api,
@@ -256,6 +281,7 @@ class _Applier:
             typedefs=(*self.api.typedefs, *self.new_typedefs),
             opaques=tuple(self.opaques),
             macros=tuple(self.macros),
+            init_interfaces=tuple(self.init_interfaces),
         )
 
     def check_used(self, api: Api) -> None:
@@ -291,6 +317,7 @@ def apply_overrides(api: Api, overrides: Mapping[str, Any]) -> Api:
     applier.macro_values(overrides.get("macros", {}))
     applier.annotations(overrides.get("annotations", {}))
     applier.unsupported(overrides.get("unsupported", {}))
+    applier.init_interface_names(overrides.get("init_interfaces", []))
     result = applier.result()
     applier.check_used(result)
     if applier.problems:
