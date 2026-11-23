@@ -26,7 +26,7 @@ def test_init_stores_handles_and_shuts_down_once(
         "SteamAPI_GetHSteamPipe",
         "SteamAPI_GetHSteamUser",
     ]
-    assert fake.init_versions == "\0".join(INIT_INTERFACE_VERSIONS).encode() + b"\0\0"
+    assert fake.init_versions == list(INIT_INTERFACE_VERSIONS)
 
     [hook] = exit_hooks
     steam.shutdown()

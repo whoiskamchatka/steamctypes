@@ -109,9 +109,10 @@ def test_call_results(steam: Steam, fake: FakeSteamLibrary) -> None:
     assert failure.value.reason == network_failure
     restored = pickle.loads(pickle.dumps(failure.value))
     assert (restored.reason, str(restored)) == (network_failure, str(failure.value))
-    fake.next_handle = 0  # k_uAPICallInvalid
+    handle, fake.next_handle = fake.next_handle, 0  # k_uAPICallInvalid
     with pytest.raises(CallResultError):
         find(fake)[1].result()
+    fake.next_handle = handle
 
     # The call completes while still inside the native call, and another thread is already
     # waiting to run a frame. That frame must not consume the completion before registration.

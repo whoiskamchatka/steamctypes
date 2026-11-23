@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -8,18 +7,25 @@ from steamctypes._generated.functions import PROTOTYPES
 from steamctypes._loader import library_name
 from steamctypes._native import check_compatible
 from steamctypes.errors import IncompatibleLibraryError, SteamWarning
+from tests.fake_steam import export
 
 
 class FakeLibrary:
-    """Has every function but the missing ones; each returns 0."""
+    """Has every function but the missing ones; only RestartAppIfNecessary can be called."""
 
     def __init__(self, missing: list[str]) -> None:
         self.missing = set(missing)
+        self.restart = export("SteamAPI_RestartAppIfNecessary", self.restart_app, [])
 
-    def __getattr__(self, name: str) -> Callable[..., int]:
+    def __getattr__(self, name: str) -> object:
         if name in self.missing:
             raise AttributeError(name)
-        return lambda *args: 0
+        if name == "SteamAPI_RestartAppIfNecessary":
+            return self.restart
+        return object()  # enough for check_compatible; Native cannot bind it
+
+    def restart_app(self, app_id: int) -> bool:
+        return False
 
 
 def test_check_compatible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

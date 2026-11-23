@@ -1,13 +1,18 @@
 """A stand-in for the steam_api library, so tests never touch Steam."""
 
 import ctypes
+import inspect
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from steamctypes._generated.callbacks import CALLBACKS
-from steamctypes._generated.functions import ACCESSORS
+from steamctypes._generated.functions import ACCESSORS, PROTOTYPES
 from steamctypes._generated.structs import CallbackMsg_t, SteamAPICallCompleted_t
+
+if TYPE_CHECKING:
+    # The class of POINTER(...) instances; typeshed has no public name for it.
+    from ctypes import _Pointer  # pyright: ignore[reportPrivateUsage]
 
 UTILS = 0x5E11  # what the fake ISteamUtils accessor returns
 CALLBACK_IDS = {
@@ -15,29 +20,51 @@ CALLBACK_IDS = {
 }
 
 
-class FakeFunction:
-    """One export: records its calls and accepts the restype and argtypes steamctypes sets."""
+def export(name: str, body: Callable[..., Any], calls: list[str]) -> Callable[..., Any]:
+    """A function pointer to body with the prototype steamctypes uses for name."""
+    if name not in PROTOTYPES:
+        raise ValueError(f"the fake {name} has no prototype in the generated bindings")
+    restype, argtypes = PROTOTYPES[name]
+    arity = len(inspect.signature(body).parameters)
+    if arity != len(argtypes):
+        raise TypeError(f"the fake {name} takes {arity} arguments, its prototype {len(argtypes)}")
+    raised: list[BaseException] = []
 
-    def __init__(self, calls: list[str], name: str, body: Callable[..., Any]) -> None:
-        self.calls = calls
-        self.name = name
-        self.body = body
-        self.restype: object = None
-        self.argtypes: object = ()
+    def call(*args: Any) -> Any:
+        calls.append(name)
+        try:
+            return body(*args)
+        except BaseException as error:
+            # An exception cannot cross the C frame; errcheck raises it in the caller.
+            raised.append(error)
+            return None if restype is None else 0
 
-    def __call__(self, *args: Any) -> Any:
-        self.calls.append(self.name)
-        return self.body(*args)
+    def errcheck(result: Any, function: Any, args: Any) -> Any:
+        if raised:
+            raise raised.pop()
+        return result
+
+    # In a callback, ctypes turns a char * into bytes cut at the first NUL. The body gets
+    # the address instead, to read it as C does. Callers still convert with the prototype.
+    callback_types = [ctypes.c_void_p if t is ctypes.c_char_p else t for t in argtypes]
+    function = ctypes.CFUNCTYPE(restype, *callback_types)(call)
+    function.argtypes = argtypes
+    function.errcheck = errcheck
+    return function
 
 
 class FakeSteamLibrary:
-    """The functions steamctypes calls, with configurable results and a callback queue."""
+    """The functions steamctypes calls, with configurable results and a callback queue.
+
+    Each is a ctypes function pointer with the prototype steamctypes uses, so arguments and
+    results go through the same conversions as with the real library.
+    """
 
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.init_result = 0
         self.init_message = b""
-        self.init_versions = b""
+        self.init_versions: list[str] = []
         self.pipe = 1
         self.user = 1
         self.restart = False
@@ -49,9 +76,9 @@ class FakeSteamLibrary:
         self.delivered = 0
         self.freed = 0
         self.frame_delay = 0.0
-        self.next_handle = 100
+        self.next_handle = (1 << 32) + 100  # a handle truncated to 32 bits matches nothing
         self.during_call: Callable[[int], None] | None = None
-        self.functions: dict[str, Callable[..., Any]] = {
+        bodies: dict[str, Callable[..., Any]] = {
             "SteamInternal_SteamAPI_Init": self.init,
             "SteamAPI_ManualDispatch_Init": lambda: None,
             "SteamAPI_GetHSteamPipe": lambda: self.pipe,
@@ -66,11 +93,13 @@ class FakeSteamLibrary:
             "SteamAPI_ISteamUtils_GetAPICallFailureReason": self.failure_reason,
             "SteamAPI_ISteamUserStats_FindLeaderboard": self.find_leaderboard,
         }
+        # The function pointers keep their bodies alive as long as the fake lives.
+        self.exports = {name: export(name, body, self.calls) for name, body in bodies.items()}
 
-    def __getattr__(self, name: str) -> FakeFunction:
-        if name not in self.functions:
+    def __getattr__(self, name: str) -> Callable[..., Any]:
+        if name not in self.exports:
             raise AttributeError(name)
-        return FakeFunction(self.calls, name, self.functions[name])
+        return self.exports[name]
 
     def post(self, callback_id: int, payload: bytes, frames: int = 0) -> None:
         """Queue a callback for the RunFrame `frames` frames after the next one."""
@@ -97,9 +126,13 @@ class FakeSteamLibrary:
         )
         self.post(SteamAPICallCompleted_t.k_iCallback, bytes(completed), frames)
 
-    def init(self, versions: bytes, message: ctypes.Array[ctypes.c_char]) -> int:
-        self.init_versions = versions
-        message.value = self.init_message
+    def init(self, versions: int, message: "_Pointer[ctypes.Array[ctypes.c_char]]") -> int:
+        # NUL-terminated strings, ended by an empty one.
+        self.init_versions = []
+        while version := ctypes.string_at(versions):
+            self.init_versions.append(version.decode())
+            versions += len(version) + 1
+        message.contents.value = self.init_message
         return self.init_result
 
     def restart_app(self, app_id: int) -> bool:
@@ -109,14 +142,14 @@ class FakeSteamLibrary:
         time.sleep(self.frame_delay)
         self.frames += 1
 
-    def find_leaderboard(self, stats: int | None, name: bytes) -> int:
+    def find_leaderboard(self, stats: int | None, name: int) -> int:
         handle = self.next_handle
         self.next_handle += 1
         if self.during_call is not None:
             self.during_call(handle)
         return handle
 
-    def next_callback(self, pipe: int, message: CallbackMsg_t) -> bool:
+    def next_callback(self, pipe: int, message: "_Pointer[CallbackMsg_t]") -> bool:
         assert self.payload is None, "GetNextCallback before the last callback was freed"
         due = next((entry for entry in self.queue if entry[0] <= self.frames), None)
         if due is None:
@@ -124,10 +157,10 @@ class FakeSteamLibrary:
         self.queue.remove(due)
         _, callback_id, payload = due
         self.payload = ctypes.create_string_buffer(payload, len(payload))
-        message.m_hSteamUser = self.user
-        message.m_iCallback = callback_id
-        message.m_pubParam = ctypes.addressof(self.payload)
-        message.m_cubParam = len(payload)
+        message.contents.m_hSteamUser = self.user
+        message.contents.m_iCallback = callback_id
+        message.contents.m_pubParam = ctypes.addressof(self.payload)
+        message.contents.m_cubParam = len(payload)
         self.delivered += 1
         return True
 
@@ -146,7 +179,7 @@ class FakeSteamLibrary:
         buffer: int,
         size: int,
         expected_id: int,
-        failed: ctypes.c_bool,
+        failed: "_Pointer[ctypes.c_bool]",
     ) -> bool:
         if handle not in self.call_results:
             return False
@@ -154,7 +187,7 @@ class FakeSteamLibrary:
         if size != len(payload):
             return False
         ctypes.memmove(buffer, payload, size)
-        failed.value = call_failed
+        failed.contents.value = call_failed
         return True
 
     def failure_reason(self, utils: int, handle: int) -> int:
