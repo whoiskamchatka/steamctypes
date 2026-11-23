@@ -8,7 +8,7 @@ import sys
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from tools.generator.ctype import named_types
 from tools.generator.model import (
@@ -24,7 +24,7 @@ from tools.generator.model import (
     Primitive,
     Union,
 )
-from tools.sdk import REPO_ROOT
+from tools.sdk import REDIST_DIR, REPO_ROOT, Lock
 
 OUTPUT_DIR = REPO_ROOT / "src" / "steamctypes" / "_generated"
 
@@ -379,14 +379,27 @@ def _format(source: str, path: Path) -> str:
     return result.stdout.decode()
 
 
-def generate(api: Api, sdk_version: str) -> dict[str, str]:
+def _init_module(lock: Lock) -> str:
+    libraries = {
+        PurePosixPath(path).name: digest
+        for path, digest in lock.sha256.items()
+        if path.startswith(f"{REDIST_DIR}/")
+    }
+    entries = ", ".join(f'"{name}": "{digest}"' for name, digest in sorted(libraries.items()))
+    lines = [
+        f'SDK_VERSION: Final = "{lock.version}"',
+        "# sha256 of the SDK's steam_api library for each platform, by file name.",
+        f"LIBRARY_SHA256: Final[Mapping[str, str]] = {{{entries}}}",
+    ]
+    return _module(["from collections.abc import Mapping", "from typing import Final"], [], lines)
+
+
+def generate(api: Api, lock: Lock) -> dict[str, str]:
     """Every generated file name with its formatted source."""
     constants = {c.qualified_name: c.value for c in api.constants if isinstance(c.value, int)}
     constants |= {m.name: m.value for m in api.macros}
     emitters: dict[str, Callable[[], str]] = {
-        "__init__.py": lambda: (
-            f'from typing import Final\n\nSDK_VERSION: Final = "{sdk_version}"\n'
-        ),
+        "__init__.py": lambda: _init_module(lock),
         "callbacks.py": lambda: _callbacks_module(api),
         "constants.py": lambda: _constants_module(api),
         "enums.py": lambda: _enums_module(api),
@@ -394,7 +407,7 @@ def generate(api: Api, sdk_version: str) -> dict[str, str]:
         "structs.py": lambda: _structs_module(api, constants),
         "typedefs.py": lambda: _typedefs_module(api, constants),
     }
-    header = f"# Generated from Steamworks SDK {sdk_version} by tools/generator. Do not edit.\n"
+    header = f"# Generated from Steamworks SDK {lock.version} by tools/generator. Do not edit.\n"
     return {name: _format(header + emit(), OUTPUT_DIR / name) for name, emit in emitters.items()}
 
 
