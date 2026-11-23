@@ -1,0 +1,188 @@
+# Hand-maintained corrections to steam_api.json, checked against the SDK headers.
+# Every entry must refer to something in the JSON and must be needed; stale entries fail the load.
+
+# Enums whose values are bits meant to be combined.
+flag_enums = [
+    "EBetaBranchFlags",
+    "EChatMemberStateChange",
+    "EChatSteamIDInstanceFlags",
+    "EFriendFlags",
+    "EItemState",
+    "EMarketNotAllowedReasonFlags",
+    "EPersonaChange",
+    "ERemotePlayKeyModifier",
+    "ERemoteStoragePlatform",
+    "ESteamInputConfigurationEnableType",
+    "ESteamInputGlyphStyle",
+    "ESteamItemFlags",
+    "ISteamHTMLSurface::EHTMLKeyModifiers",
+]
+
+# Types the JSON uses but never defines.
+
+# 8-byte classes declared under pack(1) in the headers. The flat API passes them by value as uint64.
+[types.CSteamID]
+kind = "struct"
+pack = 1
+fields = [{ name = "m_steamid", type = "uint64" }]
+
+[types.CGameID]
+kind = "struct"
+pack = 1
+fields = [{ name = "m_ulGameID", type = "uint64" }]
+
+[types.uint64_steamid]
+kind = "alias"
+type = "uint64"
+
+[types.uint64_gameid]
+kind = "alias"
+type = "uint64"
+
+[types.SteamAPIWarningMessageHook_t]
+kind = "alias"
+type = "void (*)(int, const char *)"
+
+[types.SteamDatagramRelayAuthTicket]
+kind = "opaque"
+
+[types.ScePadTriggerEffectParam]
+kind = "opaque"
+
+# C++ interfaces the caller implements.
+[types.ISteamNetworkingConnectionSignaling]
+kind = "opaque"
+
+[types.ISteamNetworkingSignalingRecvContext]
+kind = "opaque"
+
+[types."SteamInputActionEvent_t::AnalogAction_t"]
+kind = "struct"
+pack = 1
+fields = [
+    { name = "actionHandle", type = "InputAnalogActionHandle_t" },
+    { name = "analogActionData", type = "InputAnalogActionData_t" },
+]
+
+[types."SteamInputActionEvent_t::DigitalAction_t"]
+kind = "struct"
+pack = 1
+fields = [
+    { name = "actionHandle", type = "InputDigitalActionHandle_t" },
+    { name = "digitalActionData", type = "InputDigitalActionData_t" },
+]
+
+[types."SteamNetworkingIPAddr::IPv4MappedAddress"]
+kind = "struct"
+pack = 1
+fields = [
+    { name = "m_8zeros", type = "uint64" },
+    { name = "m_0000", type = "uint16" },
+    { name = "m_ffff", type = "uint16" },
+    { name = "m_ip", type = "uint8 [4]" },
+]
+
+# Structs outside the platform callback packing. Everything else follows the platform rule.
+[pack]
+InputAnalogActionData_t = 1
+InputDigitalActionData_t = 1
+InputMotionData_t = 1
+SteamIPAddress_t = 1
+SteamInputActionEvent_t = 1
+SteamNetworkingIPAddr = 1
+SteamNetworkingIdentity = 1
+SteamNetworkingMessagesSessionFailed_t = 1
+SteamNetworkingMessagesSessionRequest_t = 1
+MatchMakingKeyValuePair_t = "natural"
+SteamNetworkPingLocation_t = "natural"
+SteamNetworkingConfigValue_t = "natural"
+SteamNetworkingMessage_t = "natural"
+SteamParentalSettingsChanged_t = "natural"
+SteamRelayNetworkStatus_t = "natural"
+gameserveritem_t = "natural"
+servernetadr_t = "natural"
+
+# Unions the JSON reduces to one member. `replaces` names that member; `field` names the union
+# member of the struct, absent for an anonymous union.
+[unions.SteamInputActionEvent_t]
+replaces = "analogAction"
+members = [
+    { name = "analogAction", type = "SteamInputActionEvent_t::AnalogAction_t" },
+    { name = "digitalAction", type = "SteamInputActionEvent_t::DigitalAction_t" },
+]
+
+[unions.SteamNetworkingConfigValue_t]
+replaces = "m_int64"
+field = "m_val"
+members = [
+    { name = "m_int32", type = "int32_t" },
+    { name = "m_int64", type = "int64_t" },
+    { name = "m_float", type = "float" },
+    { name = "m_string", type = "const char *" },
+    { name = "m_ptr", type = "void *" },
+]
+
+[unions.SteamNetworkingIPAddr]
+replaces = "m_ipv6"
+members = [
+    { name = "m_ipv6", type = "uint8 [16]" },
+    { name = "m_ipv4", type = "SteamNetworkingIPAddr::IPv4MappedAddress" },
+]
+
+[unions.SteamNetworkingIdentity]
+replaces = "m_szUnknownRawString"
+members = [
+    { name = "m_steamID64", type = "uint64" },
+    { name = "m_PSNID", type = "uint64" },
+    { name = "m_szGenericString", type = "char [SteamNetworkingIdentity::k_cchMaxGenericString]" },
+    { name = "m_szXboxPairwiseID", type = "char [SteamNetworkingIdentity::k_cchMaxXboxPairwiseID]" },
+    { name = "m_genericBytes", type = "uint8 [SteamNetworkingIdentity::k_cbMaxGenericBytes]" },
+    { name = "m_szUnknownRawString", type = "char [SteamNetworkingIdentity::k_cchMaxString]" },
+    { name = "m_ip", type = "SteamNetworkingIPAddr" },
+    { name = "m_reserved", type = "uint32 [32]" },
+]
+
+[unions.SteamIPAddress_t]
+replaces = "m_rgubIPv6"
+members = [
+    { name = "m_unIPv4", type = "uint32" },
+    { name = "m_rgubIPv6", type = "uint8 [16]" },
+    { name = "m_ipv6Qword", type = "uint64 [2]" },
+]
+
+# The padding member keeps the struct at 64 bytes.
+[unions.RemotePlayInput_t]
+replaces = "padding"
+members = [
+    { name = "m_MouseMotion", type = "RemotePlayInputMouseMotion_t" },
+    { name = "m_eMouseButton", type = "ERemotePlayMouseButton" },
+    { name = "m_MouseWheel", type = "RemotePlayInputMouseWheel_t" },
+    { name = "m_Key", type = "RemotePlayInputKey_t" },
+    { name = "padding", type = "char [56]" },
+]
+
+# Values of names the JSON refers to but does not define.
+[macros]
+STEAM_CONTROLLER_MAX_ACTIVE_LAYERS = 16
+STEAM_CONTROLLER_MAX_COUNT = 16
+STEAM_CONTROLLER_MAX_ORIGINS = 8
+STEAM_INPUT_MAX_ACTIVE_LAYERS = 16
+STEAM_INPUT_MAX_COUNT = 16
+STEAM_INPUT_MAX_ORIGINS = 8
+
+# Annotations that name the wrong parameter.
+[annotations.SteamAPI_ISteamInventory_DeserializeResult]
+pBuffer = { buffer_count = "unBufferSize" }
+
+[annotations.SteamAPI_ISteamInventory_GetItemsWithPrices]
+pArrayItemDefs = { out_array_count = "unArrayLength" }
+pCurrentPrices = { out_array_count = "unArrayLength" }
+pBasePrices = { out_array_count = "unArrayLength" }
+
+# Interfaces the caller would have to implement as C++ objects with vtables.
+[unsupported]
+ISteamMatchmakingServerListResponse = "callback interface implemented by the caller"
+ISteamMatchmakingPingResponse = "callback interface implemented by the caller"
+ISteamMatchmakingPlayersResponse = "callback interface implemented by the caller"
+ISteamMatchmakingRulesResponse = "callback interface implemented by the caller"
+ISteamMatchmakingServerFriendsResponse = "callback interface implemented by the caller"
