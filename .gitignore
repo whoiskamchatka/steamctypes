@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# uv and virtual environments
+.venv/
+
+# Build
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Local maintainer files
+CLAUDE.md
+vendor/
+steam_api.json
+steam_appid.txt
+
+# Steamworks binaries
+*.dll
+*.so
+*.dylib
