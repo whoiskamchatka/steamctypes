@@ -10,14 +10,18 @@ from typing import Any, cast
 from tools.generator import constants
 from tools.generator.ctype import TypeSyntaxError, array_lengths, named_types, parse_type
 from tools.generator.model import (
+    AccessorKind,
     AnnotationKind,
     Api,
     CType,
+    Enum,
     Field,
     Function,
+    Interface,
     Macro,
     Opaque,
     Pack,
+    Param,
     Primitive,
     Struct,
     Typedef,
@@ -29,8 +33,11 @@ OVERRIDES_PATH = Path(__file__).with_name("overrides.toml")
 SECTIONS = frozenset(
     {
         "flag_enums",
+        "not_flag_enums",
         "game_server_callbacks",
         "init_interfaces",
+        "not_init_interfaces",
+        "globals",
         "macros",
         "pack",
         "types",
@@ -54,6 +61,19 @@ def _key(value: object, key: str) -> object:
     return cast(dict[str, object], value).get(key) if isinstance(value, dict) else None
 
 
+def _looks_like_flags(enum: Enum) -> bool:
+    """At least three positive values, all powers of two: a decision the lists must record."""
+    positive = [v.value for v in enum.values if v.value > 0]
+    return len(positive) >= 3 and all(v & (v - 1) == 0 for v in positive)
+
+
+def _init_candidate(interface: Interface) -> bool:
+    """A versioned interface with a user accessor, which init may or may not check."""
+    return interface.version is not None and any(
+        a.kind is AccessorKind.USER for a in interface.accessors
+    )
+
+
 class _Applier:
     def __init__(self, api: Api) -> None:
         self.api = api
@@ -73,6 +93,7 @@ class _Applier:
         self.macros: list[Macro] = []
         self.init_interfaces: list[str] = []
         self.game_server_callbacks: list[str] = []
+        self.global_functions: list[Function] = []
 
     def table(
         self,
@@ -196,6 +217,29 @@ class _Applier:
             else:
                 self.enums[name] = replace(enum, flags=True)
 
+    def flag_tripwire(self, names: object) -> None:
+        """Every enum that looks like a flag set must be in flag_enums or not_flag_enums."""
+        if not isinstance(names, list):
+            self.problems.append("not_flag_enums: expected a list of enum names")
+            return
+        not_flags = cast(list[Any], names)
+        for i, name in enumerate(not_flags):
+            enum = self.enums.get(name)
+            if name in not_flags[:i]:
+                self.problems.append(f"not_flag_enums: {name} is listed twice")
+            elif enum is None:
+                self.problems.append(f"not_flag_enums: no enum {name} in steam_api.json")
+            elif enum.flags:
+                self.problems.append(f"not_flag_enums: {name} is also in flag_enums")
+            elif not _looks_like_flags(enum):
+                self.problems.append(f"not_flag_enums: {name} does not look like a flag set")
+        for name, enum in self.enums.items():
+            if _looks_like_flags(enum) and not enum.flags and name not in not_flags:
+                self.problems.append(
+                    f"{name}: at least three positive values, all powers of two; "
+                    "add it to flag_enums or not_flag_enums"
+                )
+
     def macro_values(self, section: Mapping[str, Any]) -> None:
         json_constants = {c.qualified_name for c in self.api.constants}
         for name, value in section.items():
@@ -274,6 +318,50 @@ class _Applier:
             else:
                 self.init_interfaces.append(name)
 
+    def init_tripwire(self, names: object) -> None:
+        """Every versioned user interface must be in init_interfaces or not_init_interfaces."""
+        if not isinstance(names, list):
+            self.problems.append("not_init_interfaces: expected a list of interface names")
+            return
+        excluded = cast(list[Any], names)
+        for i, name in enumerate(excluded):
+            interface = self.interfaces.get(name)
+            if name in excluded[:i]:
+                self.problems.append(f"not_init_interfaces: {name} is listed twice")
+            elif interface is None:
+                self.problems.append(f"not_init_interfaces: no interface {name} in steam_api.json")
+            elif name in self.init_interfaces:
+                self.problems.append(f"not_init_interfaces: {name} is also in init_interfaces")
+            elif not _init_candidate(interface):
+                self.problems.append(
+                    f"not_init_interfaces: {name} has no version string or no user accessor"
+                )
+        for name, interface in self.interfaces.items():
+            if _init_candidate(interface) and name not in self.init_interfaces + excluded:
+                self.problems.append(
+                    f"{name}: versioned interface with a user accessor; "
+                    "add it to init_interfaces or not_init_interfaces"
+                )
+
+    def global_function_declarations(self, section: Mapping[str, Any]) -> None:
+        flat_names = {f.flat_name for _, f in self.api.functions()}
+        flat_names |= {a.flat_name for i in self.api.interfaces for a in i.accessors}
+        for name, value in section.items():
+            where = f"globals.{name}"
+            spec = self.table(value, where, {"returns"}, {"params"})
+            if name in flat_names:
+                self.problems.append(f"{where}: already in steam_api.json")
+            elif spec is not None:
+                params = self.fields(spec.get("params", []), f"{where}.params")
+                self.global_functions.append(
+                    Function(
+                        name=name,
+                        flat_name=name,
+                        params=tuple(Param(str(p.name), p.type) for p in params),
+                        returns=self.ctype(spec["returns"], f"{where}.returns"),
+                    )
+                )
+
     def game_server_callback_names(self, names: object) -> None:
         if not isinstance(names, list):
             self.problems.append("game_server_callbacks: expected a list of struct names")
@@ -311,6 +399,7 @@ class _Applier:
             macros=tuple(self.macros),
             init_interfaces=tuple(self.init_interfaces),
             game_server_callbacks=tuple(self.game_server_callbacks),
+            global_functions=tuple(self.global_functions),
         )
 
     def check_used(self, api: Api) -> None:
@@ -343,11 +432,14 @@ def apply_overrides(api: Api, overrides: Mapping[str, Any]) -> Api:
     applier.packs(overrides.get("pack", {}))
     applier.unions(overrides.get("unions", {}))
     applier.flag_enums(overrides.get("flag_enums", []))
+    applier.flag_tripwire(overrides.get("not_flag_enums", []))
     applier.macro_values(overrides.get("macros", {}))
     applier.annotations(overrides.get("annotations", {}))
     applier.unsupported(overrides.get("unsupported", {}))
     applier.init_interface_names(overrides.get("init_interfaces", []))
+    applier.init_tripwire(overrides.get("not_init_interfaces", []))
     applier.game_server_callback_names(overrides.get("game_server_callbacks", []))
+    applier.global_function_declarations(overrides.get("globals", {}))
     result = applier.result()
     applier.check_used(result)
     if applier.problems:

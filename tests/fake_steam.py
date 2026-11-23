@@ -6,8 +6,7 @@ from typing import Any
 
 from steamctypes._generated.callbacks import CALLBACKS
 from steamctypes._generated.functions import ACCESSORS
-from steamctypes._generated.structs import SteamAPICallCompleted_t
-from steamctypes._native import CallbackMsg_t
+from steamctypes._generated.structs import CallbackMsg_t, SteamAPICallCompleted_t
 
 UTILS = 0x5E11  # what the fake ISteamUtils accessor returns
 CALLBACK_IDS = {

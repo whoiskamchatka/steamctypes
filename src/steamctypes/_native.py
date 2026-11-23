@@ -1,63 +1,15 @@
 """Bind the generated prototypes to a loaded steam_api library."""
 
-import ctypes
 import hashlib
-import sys
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
-from steamctypes._generated import LIBRARY_SHA256, SDK_VERSION, typedefs
-from steamctypes._generated.functions import PROTOTYPES, Prototype
-from steamctypes._loader import library_name
+from steamctypes._generated import LIBRARY_SHA256, SDK_VERSION
+from steamctypes._generated.functions import PROTOTYPES
+from steamctypes._loader import library_folder
 from steamctypes.errors import IncompatibleLibraryError, SteamWarning
-
-
-class CallbackMsg_t(ctypes.Structure):
-    """One queued callback, as manual dispatch hands it out (steam_api_internal.h)."""
-
-    _pack_ = 8 if sys.platform == "win32" else 4
-    _layout_ = "ms"
-    _fields_ = (
-        ("m_hSteamUser", typedefs.HSteamUser),
-        ("m_iCallback", ctypes.c_int),
-        ("m_pubParam", ctypes.c_void_p),
-        ("m_cubParam", ctypes.c_int),
-    )
-
-
-# The global functions are not in steam_api.json. Signatures from steam_api.h and
-# steam_api_internal.h; the init result is an ESteamAPIInitResult.
-GLOBAL_PROTOTYPES: Final[Mapping[str, Prototype]] = {
-    "SteamInternal_SteamAPI_Init": (
-        ctypes.c_int,
-        (ctypes.c_char_p, ctypes.POINTER(typedefs.SteamErrMsg)),
-    ),
-    "SteamAPI_Shutdown": (None, ()),
-    "SteamAPI_RestartAppIfNecessary": (ctypes.c_bool, (typedefs.uint32,)),
-    "SteamAPI_ManualDispatch_Init": (None, ()),
-    "SteamAPI_GetHSteamPipe": (typedefs.HSteamPipe, ()),
-    "SteamAPI_GetHSteamUser": (typedefs.HSteamUser, ()),
-    "SteamAPI_ManualDispatch_RunFrame": (None, (typedefs.HSteamPipe,)),
-    "SteamAPI_ManualDispatch_GetNextCallback": (
-        ctypes.c_bool,
-        (typedefs.HSteamPipe, ctypes.POINTER(CallbackMsg_t)),
-    ),
-    "SteamAPI_ManualDispatch_FreeLastCallback": (None, (typedefs.HSteamPipe,)),
-    "SteamAPI_ManualDispatch_GetAPICallResult": (
-        ctypes.c_bool,
-        (
-            typedefs.HSteamPipe,
-            typedefs.SteamAPICall_t,
-            ctypes.c_void_p,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_bool),
-        ),
-    ),
-}
-_PROTOTYPES: Final[Mapping[str, Prototype]] = {**PROTOTYPES, **GLOBAL_PROTOTYPES}
 
 
 class Native:
@@ -70,7 +22,7 @@ class Native:
     def __getitem__(self, name: str) -> Callable[..., Any]:
         function = self._bound.get(name)
         if function is None:
-            restype, argtypes = _PROTOTYPES[name]
+            restype, argtypes = PROTOTYPES[name]
             function = getattr(self._library, name)
             function.restype = restype
             function.argtypes = argtypes
@@ -80,16 +32,16 @@ class Native:
 
 def check_compatible(library: object, path: Path) -> None:
     """Fail if the library lacks any function of our SDK; warn if it is not our SDK's file."""
-    missing = [name for name in _PROTOTYPES if not hasattr(library, name)]
+    missing = [name for name in PROTOTYPES if not hasattr(library, name)]
     if missing:
         raise IncompatibleLibraryError(
             f"{path} is not the steam_api library from Steamworks SDK {SDK_VERSION}: "
-            f"{len(missing)} of {len(_PROTOTYPES)} functions are missing, "
+            f"{len(missing)} of {len(PROTOTYPES)} functions are missing, "
             f"for example {', '.join(missing[:3])}"
         )
     with path.open("rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()
-    if digest != LIBRARY_SHA256[library_name()]:
+    if digest != LIBRARY_SHA256[library_folder()]:
         warnings.warn(
             f"{path} differs from the steam_api library in Steamworks SDK {SDK_VERSION}. It has "
             "every function steamctypes needs, but if it comes from another SDK version, struct "

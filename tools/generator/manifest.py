@@ -13,14 +13,22 @@ from tools.sdk import LOCK_PATH, REPO_ROOT, file_sha256
 GENERATOR = Path(__file__).resolve().parent.relative_to(REPO_ROOT)
 OUTPUT = OUTPUT_DIR.relative_to(REPO_ROOT)
 LOCK = LOCK_PATH.relative_to(REPO_ROOT)
+SDK_TOOL = GENERATOR.parent / "sdk.py"
 MANIFEST = GENERATOR / "manifest.json"
 INPUTS_CHANGED = "generator inputs changed without regenerating"
 
 
 def inputs_hash(root: Path) -> str:
-    """One hash over the generator sources, overrides.toml and sdk.lock, as stored on disk."""
+    """One hash over everything generation reads besides the SDK, as stored on disk."""
     generator = root / GENERATOR
-    inputs = [*sorted(generator.glob("*.py")), generator / "overrides.toml", root / LOCK]
+    # The ruff version and settings are not inputs: CI's `ruff format --check` catches output that
+    # the current ruff would format differently.
+    inputs = [
+        *sorted(generator.glob("*.py")),
+        generator / "overrides.toml",
+        root / SDK_TOOL,
+        root / LOCK,
+    ]
     digest = hashlib.sha256()
     for path in inputs:
         digest.update(f"{path.relative_to(root).as_posix()}\0{file_sha256(path)}\n".encode())

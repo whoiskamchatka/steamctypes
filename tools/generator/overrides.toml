@@ -18,6 +18,12 @@ flag_enums = [
     "ISteamHTMLSurface::EHTMLKeyModifiers",
 ]
 
+# Enums with at least three positive values, all powers of two, that are not flag sets. Generation
+# fails for an enum like that in neither list, so a new SDK forces a decision.
+not_flag_enums = [
+    "ERemotePlayMouseButton", # one button per RemotePlayInput_t
+]
+
 # The interfaces whose versions SteamAPI_InitEx in steam_api.h asks the Steam client to support,
 # in the header's order.
 init_interfaces = [
@@ -46,6 +52,10 @@ init_interfaces = [
     "ISteamUser",
     "ISteamVideo",
 ]
+
+# Versioned interfaces with a user accessor that SteamAPI_InitEx does not check. Generation fails
+# for an interface like that in neither list.
+not_init_interfaces = ["ISteamTimeline"]
 
 # Game server callback structs that share their callback id with a user struct. The callback
 # registry lists the user struct first.
@@ -219,3 +229,64 @@ ISteamMatchmakingPingResponse = "callback interface implemented by the caller"
 ISteamMatchmakingPlayersResponse = "callback interface implemented by the caller"
 ISteamMatchmakingRulesResponse = "callback interface implemented by the caller"
 ISteamMatchmakingServerFriendsResponse = "callback interface implemented by the caller"
+
+# Exported functions steam_api.json does not describe, from steam_api.h and steam_api_internal.h.
+[globals.SteamInternal_SteamAPI_Init]
+returns = "ESteamAPIInitResult"
+params = [
+    { name = "pszInternalCheckInterfaceVersions", type = "const char *" },
+    { name = "pOutErrMsg", type = "SteamErrMsg *" },
+]
+
+[globals.SteamAPI_Shutdown]
+returns = "void"
+
+[globals.SteamAPI_RestartAppIfNecessary]
+returns = "bool"
+params = [{ name = "unOwnAppID", type = "uint32" }]
+
+[globals.SteamAPI_GetHSteamPipe]
+returns = "HSteamPipe"
+
+[globals.SteamAPI_GetHSteamUser]
+returns = "HSteamUser"
+
+[globals.SteamAPI_ManualDispatch_Init]
+returns = "void"
+
+[globals.SteamAPI_ManualDispatch_RunFrame]
+returns = "void"
+params = [{ name = "hSteamPipe", type = "HSteamPipe" }]
+
+[globals.SteamAPI_ManualDispatch_GetNextCallback]
+returns = "bool"
+params = [
+    { name = "hSteamPipe", type = "HSteamPipe" },
+    { name = "pCallbackMsg", type = "CallbackMsg_t *" },
+]
+
+[globals.SteamAPI_ManualDispatch_FreeLastCallback]
+returns = "void"
+params = [{ name = "hSteamPipe", type = "HSteamPipe" }]
+
+[globals.SteamAPI_ManualDispatch_GetAPICallResult]
+returns = "bool"
+params = [
+    { name = "hSteamPipe", type = "HSteamPipe" },
+    { name = "hSteamAPICall", type = "SteamAPICall_t" },
+    { name = "pCallback", type = "void *" },
+    { name = "cubCallback", type = "int" },
+    { name = "iCallbackExpected", type = "int" },
+    { name = "pbFailed", type = "bool *" },
+]
+
+# The message manual dispatch fills in, declared in steam_api_internal.h.
+[types.CallbackMsg_t]
+kind = "struct"
+pack = "platform"
+fields = [
+    { name = "m_hSteamUser", type = "HSteamUser" },
+    { name = "m_iCallback", type = "int" },
+    { name = "m_pubParam", type = "uint8 *" },
+    { name = "m_cubParam", type = "int" },
+]

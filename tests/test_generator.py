@@ -104,7 +104,7 @@ def test_fixture_parses_into_ir() -> None:
         returns=Named("SteamAPICall_t", NamedKind.TYPEDEF),
         call_result="WidgetsCounted_t",
     )
-    assert build_api(FIXTURE, {}) == Api(
+    assert build_api(FIXTURE, {"not_init_interfaces": ["ISteamWidgets"]}) == Api(
         interfaces=(
             Interface(
                 name="ISteamWidgets",

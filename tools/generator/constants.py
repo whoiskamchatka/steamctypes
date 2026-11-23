@@ -11,7 +11,7 @@ IntTypeLookup = Callable[[str], tuple[int, bool] | None]  # bits and signedness
 _TOKEN = re.compile(
     r"""\s*(?:
         (?P<float>\d+\.\d*(?:[eE][-+]?\d+)?[fF]?)
-      | (?P<int>0[xX][0-9a-fA-F]+|\d+)[uUlL]*
+      | (?P<int>0[xX][0-9a-fA-F]+|\d+)(?P<suffix>[uUlL]*)
       | '(?P<char>\\.|[^\\'])'
       | (?P<name>[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)
       | (?P<op><<|>>|[|^&~+\-*()])
@@ -32,6 +32,13 @@ class _Token:
     kind: str  # "number", "name" or "op"
     text: str
     value: Value = 0
+    # An unsuffixed integer literal of 2**31 or more. C gives it an unsigned or wider type, so
+    # arithmetic on it would not match Python's unbounded ints.
+    wide: bool = False
+
+
+# An operand and, if it is a wide literal, that literal's text.
+_Operand = tuple[Value, str | None]
 
 
 def _tokenize(expression: str) -> list[_Token]:
@@ -46,7 +53,9 @@ def _tokenize(expression: str) -> list[_Token]:
         if (text := match["float"]) is not None:
             tokens.append(_Token("number", text, float(text.rstrip("fF"))))
         elif (text := match["int"]) is not None:
-            tokens.append(_Token("number", text, _parse_int(text)))
+            value = _parse_int(text)
+            wide = value >= 2**31 and not match["suffix"]
+            tokens.append(_Token("number", text + match["suffix"], value, wide))
         elif (text := match["char"]) is not None:
             tokens.append(_Token("number", text, _char_value(text, expression)))
         elif (text := match["name"]) is not None:
@@ -111,20 +120,29 @@ class _Parser:
             raise self.error(f"expected {op!r}, found {token.text!r}")
 
     def parse(self) -> Value:
-        value = self.binary(1)
+        value, _ = self.binary(1)  # a lone wide literal is fine: no arithmetic touches it
         if (token := self.peek()) is not None:
             raise self.error(f"unexpected {token.text!r}")
         return value
 
-    def binary(self, min_strength: int) -> Value:
-        left = self.unary()
+    def check_narrow(self, literal: str | None) -> None:
+        if literal is not None:
+            raise self.error(
+                f"{literal} does not fit an int, so C gives it an unsigned or wider type; "
+                "arithmetic on it needs a suffix or a cast"
+            )
+
+    def binary(self, min_strength: int) -> _Operand:
+        left, wide = self.unary()
         while (token := self.peek()) is not None and token.kind == "op":
             strength = _BINARY.get(token.text, 0)
             if strength < min_strength:
                 break
             self.position += 1
-            left = self.apply(token.text, left, self.binary(strength + 1))
-        return left
+            right, right_wide = self.binary(strength + 1)
+            self.check_narrow(wide or right_wide)
+            left, wide = self.apply(token.text, left, right), None
+        return left, wide
 
     def apply(self, op: str, left: Value, right: Value) -> Value:
         if op == "+":
@@ -158,33 +176,36 @@ class _Parser:
             self.position = end + 1
         return int_type
 
-    def unary(self) -> Value:
+    def unary(self) -> _Operand:
         token = self.take()
         if token.kind == "number":
-            return token.value
+            return token.value, token.text if token.wide else None
         if token.kind == "name":
             value = self.names(token.text)
             if value is None:
                 raise self.error(f"unknown name {token.text!r}")
-            return value
+            return value, None
         if token.text == "-":
-            return -self.unary()
+            value, wide = self.unary()
+            self.check_narrow(wide)
+            return -value, None
         if token.text == "+":
             return self.unary()
         if token.text == "~":
-            value = self.unary()
+            value, wide = self.unary()
+            self.check_narrow(wide)
             if not isinstance(value, int):
                 raise self.error("'~' needs an integer")
-            return ~value
+            return ~value, None
         if token.text == "(":
             if (int_type := self.cast_type()) is not None:
-                value = self.unary()
+                value, _ = self.unary()  # the cast fixes the type, whatever the literal's was
                 if not isinstance(value, int):
                     raise self.error("integer cast of a non-integer")
-                return _wrap(value, *int_type)
-            value = self.binary(1)
+                return _wrap(value, *int_type), None
+            operand = self.binary(1)
             self.expect(")")
-            return value
+            return operand
         raise self.error(f"unexpected {token.text!r}")
 
 
