@@ -47,5 +47,5 @@ def check_compatible(library: object, path: Path) -> None:
             "every function steamctypes needs, but if it comes from another SDK version, struct "
             "layouts may differ.",
             SteamWarning,
-            stacklevel=2,
+            stacklevel=4,  # past _open_native() and Steam() or restart_app_if_necessary()
         )

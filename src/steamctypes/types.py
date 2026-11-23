@@ -1,7 +1,7 @@
 """Value types shared across the API."""
 
 import operator
-from typing import NoReturn
+from typing import NoReturn, Self
 
 from steamctypes._generated.constants import (
     k_unSteamAccountIDMask,
@@ -30,6 +30,10 @@ class SteamID:
 
     def __delattr__(self, name: str) -> NoReturn:
         raise AttributeError("SteamID is immutable")
+
+    # copy and pickle would otherwise restore the slot with setattr, which is blocked.
+    def __reduce__(self) -> tuple[type[Self], tuple[int]]:
+        return type(self), (self._value,)
 
     def __int__(self) -> int:
         return self._value

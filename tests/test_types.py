@@ -1,3 +1,8 @@
+import copy
+import pickle
+
+import pytest
+
 from steamctypes import SteamID
 
 
@@ -14,3 +19,8 @@ def test_steam_id_components() -> None:
     assert hash(steam_id) == hash(SteamID(value))
     assert repr(steam_id) == f"SteamID({value})"
     assert not SteamID(0).is_valid
+    assert int(SteamID(2**64 - 1)) == 2**64 - 1
+    for out_of_range in (-1, 2**64):
+        with pytest.raises(ValueError, match="unsigned 64-bit"):
+            SteamID(out_of_range)
+    assert copy.deepcopy(steam_id) == pickle.loads(pickle.dumps(steam_id)) == steam_id

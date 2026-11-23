@@ -1,4 +1,5 @@
 import ctypes
+import pickle
 import threading
 import time
 from collections.abc import Iterator
@@ -56,7 +57,7 @@ def test_callbacks_reach_subscribers_before_the_free(steam: Steam, fake: FakeSte
 
     with pytest.warns(SteamWarning, match="Steam sent") as warned:
         assert steam.run_callbacks() == 2
-    assert len(warned) == 1
+    assert [warning.filename for warning in warned] == [__file__]
     assert requests == [(b"https://example.test/", 0)]  # read before its message was freed
     assert [bytes(data) for data in received] == [persona_change(42)]
     assert fake.delivered == fake.freed == 5
@@ -106,6 +107,8 @@ def test_call_results(steam: Steam, fake: FakeSteamLibrary) -> None:
     with pytest.raises(CallResultError) as failure:
         failing.result()
     assert failure.value.reason == network_failure
+    restored = pickle.loads(pickle.dumps(failure.value))
+    assert (restored.reason, str(restored)) == (network_failure, str(failure.value))
     fake.next_handle = 0  # k_uAPICallInvalid
     with pytest.raises(CallResultError):
         find(fake)[1].result()
@@ -145,8 +148,9 @@ def test_call_results(steam: Steam, fake: FakeSteamLibrary) -> None:
         steam.run_callbacks()
     assert len(warned) == 1
     for call in mismatched:
-        with pytest.raises(CallResultError, match="another SDK version"):
+        with pytest.raises(CallResultError, match="another SDK version") as failure:
             call.result()
+        assert str(pickle.loads(pickle.dumps(failure.value))) == str(failure.value)
 
 
 def test_wait_while_another_thread_dispatches(steam: Steam, fake: FakeSteamLibrary) -> None:
