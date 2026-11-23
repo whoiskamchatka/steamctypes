@@ -29,7 +29,7 @@ from tools.generator.model import (
     Typedef,
     Union,
 )
-from tools.sdk import REPO_ROOT
+from tools.sdk import REPO_ROOT, Lock
 
 UINT8 = Named("uint8", NamedKind.TYPEDEF)
 UINT32 = Named("uint32", NamedKind.TYPEDEF)
@@ -84,14 +84,15 @@ API = Api(
         Typedef("uint64", Primitive("unsigned long long")),
     ),
 )
+LOCK = Lock("9.99", {"redistributable_bin/win64/steam_api64.dll": "0" * 64})
 
 
 def test_generation_is_deterministic() -> None:
     script = (
         "import sys\n"
-        "from tests.test_emit import API\n"
+        "from tests.test_emit import API, LOCK\n"
         "from tools.generator.emit import generate\n"
-        "sys.stdout.write(repr(sorted(generate(API, '9.99').items())))\n"
+        "sys.stdout.write(repr(sorted(generate(API, LOCK).items())))\n"
     )
     outputs = {
         subprocess.run(
@@ -108,7 +109,7 @@ def test_generation_is_deterministic() -> None:
 
 
 def test_structs_have_platform_sizes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_files(generate(API, "9.99"), tmp_path / "widgets_generated")
+    write_files(generate(API, LOCK), tmp_path / "widgets_generated")
     monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
     structs = importlib.import_module("widgets_generated.structs")
 
@@ -124,7 +125,7 @@ def test_structs_have_platform_sizes(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_check_fails_after_a_file_is_modified(tmp_path: Path) -> None:
-    files = generate(API, "9.99")
+    files = generate(API, LOCK)
     write_files(files, tmp_path)
     assert compare_files(files, tmp_path) == []
 

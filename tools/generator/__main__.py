@@ -62,8 +62,9 @@ def main() -> int:
         root = locate_sdk()
         if problems := check_sdk(root, LOCK_PATH):
             return _fail(f"Steamworks SDK at {root} does not match {LOCK_PATH.name}:", problems)
-        version = read_lock(LOCK_PATH).version
-        files = generate(load_api(root), version)
+        lock = read_lock(LOCK_PATH)
+        version = lock.version
+        files = generate(load_api(root), lock)
     except _ERRORS as error:
         return _fail(f"error: {error}", [])
 
