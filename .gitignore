@@ -20,7 +20,6 @@ dist/
 *.swp
 
 # Local maintainer files
-CLAUDE.md
 vendor/
 steam_api.json
 steam_appid.txt

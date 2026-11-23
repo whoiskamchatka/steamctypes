@@ -2,11 +2,11 @@
 
 
 class SteamError(Exception):
-    """Base class of every steamctypes error."""
+    pass
 
 
 class LibraryNotFoundError(SteamError):
-    """The steam_api library was not found."""
+    pass
 
 
 class IncompatibleLibraryError(SteamError):
