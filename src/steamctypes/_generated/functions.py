@@ -4483,3 +4483,54 @@ PROTOTYPES: Final[Mapping[str, Prototype]] = {
         ),
     ),
 }
+# The accessor of each interface by kind: user, gameserver or global.
+ACCESSORS: Final[Mapping[str, Mapping[str, str]]] = {
+    "ISteamApps": {"user": "SteamAPI_SteamApps_v009"},
+    "ISteamController": {"user": "SteamAPI_SteamController_v008"},
+    "ISteamFriends": {"user": "SteamAPI_SteamFriends_v018"},
+    "ISteamGameServer": {"gameserver": "SteamAPI_SteamGameServer_v015"},
+    "ISteamGameServerStats": {"gameserver": "SteamAPI_SteamGameServerStats_v001"},
+    "ISteamHTMLSurface": {"user": "SteamAPI_SteamHTMLSurface_v005"},
+    "ISteamHTTP": {
+        "gameserver": "SteamAPI_SteamGameServerHTTP_v003",
+        "user": "SteamAPI_SteamHTTP_v003",
+    },
+    "ISteamInput": {"user": "SteamAPI_SteamInput_v007"},
+    "ISteamInventory": {
+        "gameserver": "SteamAPI_SteamGameServerInventory_v003",
+        "user": "SteamAPI_SteamInventory_v003",
+    },
+    "ISteamMatchmaking": {"user": "SteamAPI_SteamMatchmaking_v009"},
+    "ISteamMatchmakingServers": {"user": "SteamAPI_SteamMatchmakingServers_v003"},
+    "ISteamMusic": {"user": "SteamAPI_SteamMusic_v001"},
+    "ISteamNetworking": {
+        "gameserver": "SteamAPI_SteamGameServerNetworking_v006",
+        "user": "SteamAPI_SteamNetworking_v006",
+    },
+    "ISteamNetworkingMessages": {
+        "gameserver": "SteamAPI_SteamGameServerNetworkingMessages_SteamAPI_v002",
+        "user": "SteamAPI_SteamNetworkingMessages_SteamAPI_v002",
+    },
+    "ISteamNetworkingSockets": {
+        "gameserver": "SteamAPI_SteamGameServerNetworkingSockets_SteamAPI_v013",
+        "user": "SteamAPI_SteamNetworkingSockets_SteamAPI_v013",
+    },
+    "ISteamNetworkingUtils": {"global": "SteamAPI_SteamNetworkingUtils_SteamAPI_v004"},
+    "ISteamParentalSettings": {"user": "SteamAPI_SteamParentalSettings_v001"},
+    "ISteamParties": {"user": "SteamAPI_SteamParties_v002"},
+    "ISteamRemotePlay": {"user": "SteamAPI_SteamRemotePlay_v004"},
+    "ISteamRemoteStorage": {"user": "SteamAPI_SteamRemoteStorage_v016"},
+    "ISteamScreenshots": {"user": "SteamAPI_SteamScreenshots_v003"},
+    "ISteamTimeline": {"user": "SteamAPI_SteamTimeline_v004"},
+    "ISteamUGC": {
+        "gameserver": "SteamAPI_SteamGameServerUGC_v021",
+        "user": "SteamAPI_SteamUGC_v021",
+    },
+    "ISteamUser": {"user": "SteamAPI_SteamUser_v023"},
+    "ISteamUserStats": {"user": "SteamAPI_SteamUserStats_v013"},
+    "ISteamUtils": {
+        "gameserver": "SteamAPI_SteamGameServerUtils_v011",
+        "user": "SteamAPI_SteamUtils_v011",
+    },
+    "ISteamVideo": {"user": "SteamAPI_SteamVideo_v007"},
+}

@@ -215,6 +215,8 @@ class Api:
     macros: tuple[Macro, ...] = ()
     # Interfaces whose versions init asks the Steam client to support, in the SDK's order.
     init_interfaces: tuple[str, ...] = ()
+    # Game server structs that share their callback id with a user struct.
+    game_server_callbacks: tuple[str, ...] = ()
 
     @property
     def callbacks(self) -> tuple[Struct, ...]:

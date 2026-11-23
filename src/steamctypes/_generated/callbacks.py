@@ -5,8 +5,8 @@ from typing import Final
 
 from . import structs
 
-# Every id maps to a tuple: a few ids are shared by user and game server structs with the
-# same layout.
+# Every id maps to a tuple. An id shared by a user and a game server struct lists the
+# user struct first; both have the same layout.
 CALLBACKS: Final[Mapping[int, tuple[type[ctypes.Structure], ...]]] = {
     101: (structs.SteamServersConnected_t,),
     102: (structs.SteamServerConnectFailure_t,),

@@ -47,6 +47,10 @@ init_interfaces = [
     "ISteamVideo",
 ]
 
+# Game server callback structs that share their callback id with a user struct. The callback
+# registry lists the user struct first.
+game_server_callbacks = ["GSStatsUnloaded_t"]
+
 # Types the JSON uses but never defines.
 
 # 8-byte classes declared under pack(1) in the headers. The flat API passes them by value as uint64.
