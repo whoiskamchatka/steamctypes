@@ -1,3 +1,4 @@
+import pickle
 from collections.abc import Callable
 
 import pytest
@@ -48,6 +49,10 @@ def test_init_failures_carry_steam_message(fake: FakeSteamLibrary) -> None:
         assert type(raised.value) is error
         assert raised.value.result == code
         assert raised.value.message == message.decode("utf-8", errors="replace")
+        # Errors cross process boundaries, for example from a process pool worker.
+        restored = pickle.loads(pickle.dumps(raised.value))
+        assert (type(restored), str(restored)) == (error, str(raised.value))
+        assert (restored.result, restored.message) == (code, raised.value.message)
     assert "SteamAPI_ManualDispatch_Init" not in fake.calls
 
 

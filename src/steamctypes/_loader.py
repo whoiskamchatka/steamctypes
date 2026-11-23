@@ -50,7 +50,6 @@ def _search_folders() -> list[Path]:
         folders.append(Path(bundle))
     if script := getattr(sys.modules.get("__main__"), "__file__", None):
         folders.append(Path(script).resolve().parent)
-    folders.append(Path.cwd())
     return list(dict.fromkeys(folders))
 
 
@@ -62,10 +61,12 @@ def _only(location: Path, name: str, source: str) -> Path:
 
 
 def find_library(path: str | os.PathLike[str] | None = None) -> Path:
-    """The library at an explicit path, else at STEAMCTYPES_LIB, else in the usual folders.
+    """The library at an explicit path, else at STEAMCTYPES_LIB, else next to the program.
 
     An explicit or environment path may name the file or its folder, and is the only place
-    looked: a wrong path fails instead of silently loading another library.
+    looked: a wrong path fails instead of silently loading another library. Otherwise the
+    folders of a frozen executable, its PyInstaller bundle and the main script are searched.
+    The current directory is not, so that a library planted there is never loaded.
     """
     name = library_name()
     if path is not None:
@@ -77,8 +78,11 @@ def find_library(path: str | os.PathLike[str] | None = None) -> Path:
     for candidate in tried:
         if candidate.is_file():
             return candidate.resolve()
-    listing = "\n".join(f"  {candidate}" for candidate in tried)
-    raise LibraryNotFoundError(f"cannot find {name}; tried, in order:\n{listing}")
+    if tried:
+        searched = "tried, in order:\n" + "\n".join(f"  {candidate}" for candidate in tried)
+    else:
+        searched = "there is no executable or script folder to search."
+    raise LibraryNotFoundError(f"cannot find {name}; {searched}\nPass lib_path or set {ENV_VAR}.")
 
 
 def load_library(path: Path) -> ctypes.CDLL:

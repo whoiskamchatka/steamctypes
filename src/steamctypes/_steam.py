@@ -2,6 +2,7 @@
 
 import atexit
 import ctypes
+import operator
 import os
 import threading
 from collections.abc import Callable
@@ -158,6 +159,10 @@ class Steam:
 
 def restart_app_if_necessary(app_id: int, lib_path: str | os.PathLike[str] | None = None) -> bool:
     """Relaunch the game through Steam if needed. If this returns True, exit immediately."""
+    # ctypes would silently keep the low 32 bits and ask about another app.
+    app_id = operator.index(app_id)
+    if not 0 <= app_id <= 0xFFFF_FFFF:
+        raise ValueError(f"an app id is an unsigned 32-bit number, not {app_id}")
     with _lock:
         native = _active.native if _active is not None else _open_native(lib_path)
     return bool(native["SteamAPI_RestartAppIfNecessary"](app_id))
