@@ -1,6 +1,7 @@
 """A stand-in for the steam_api library, so tests never touch Steam."""
 
 import ctypes
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -44,8 +45,12 @@ class FakeSteamLibrary:
         self.queue: list[tuple[int, int, bytes]] = []  # frame it is due, callback id, payload
         self.call_results: dict[int, tuple[bytes, bool, int]] = {}  # payload, failed, reason
         self.payload: ctypes.Array[ctypes.c_char] | None = None  # the message being dispatched
+        self.owned: list[ctypes.Array[ctypes.c_char]] = []  # what the next free invalidates
         self.delivered = 0
         self.freed = 0
+        self.frame_delay = 0.0
+        self.next_handle = 100
+        self.during_call: Callable[[int], None] | None = None
         self.functions: dict[str, Callable[..., Any]] = {
             "SteamInternal_SteamAPI_Init": self.init,
             "SteamAPI_ManualDispatch_Init": lambda: None,
@@ -59,6 +64,7 @@ class FakeSteamLibrary:
             "SteamAPI_ManualDispatch_GetAPICallResult": self.get_call_result,
             ACCESSORS["ISteamUtils"]["user"]: lambda: UTILS,
             "SteamAPI_ISteamUtils_GetAPICallFailureReason": self.failure_reason,
+            "SteamAPI_ISteamUserStats_FindLeaderboard": self.find_leaderboard,
         }
 
     def __getattr__(self, name: str) -> FakeFunction:
@@ -69,6 +75,12 @@ class FakeSteamLibrary:
     def post(self, callback_id: int, payload: bytes, frames: int = 0) -> None:
         """Queue a callback for the RunFrame `frames` frames after the next one."""
         self.queue.append((self.frames + 1 + frames, callback_id, payload))
+
+    def steam_owned(self, data: bytes) -> int:
+        """The address of memory Steam owns until the next FreeLastCallback."""
+        buffer = ctypes.create_string_buffer(data, len(data))
+        self.owned.append(buffer)
+        return ctypes.addressof(buffer)
 
     def complete_call(
         self,
@@ -94,7 +106,15 @@ class FakeSteamLibrary:
         return self.restart
 
     def run_frame(self, pipe: int) -> None:
+        time.sleep(self.frame_delay)
         self.frames += 1
+
+    def find_leaderboard(self, stats: int | None, name: bytes) -> int:
+        handle = self.next_handle
+        self.next_handle += 1
+        if self.during_call is not None:
+            self.during_call(handle)
+        return handle
 
     def next_callback(self, pipe: int, message: CallbackMsg_t) -> bool:
         assert self.payload is None, "GetNextCallback before the last callback was freed"
@@ -113,8 +133,10 @@ class FakeSteamLibrary:
 
     def free_last_callback(self, pipe: int) -> None:
         assert self.payload is not None, "FreeLastCallback without a callback"
-        ctypes.memset(self.payload, 0xEE, len(self.payload))  # anything not copied is now garbage
+        for buffer in (self.payload, *self.owned):
+            ctypes.memset(buffer, 0xEE, len(buffer))  # anything not copied is now garbage
         self.payload = None
+        self.owned.clear()
         self.freed += 1
 
     def get_call_result(
