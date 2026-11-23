@@ -142,7 +142,9 @@ def test_call_results(steam: Steam, fake: FakeSteamLibrary) -> None:
         handle, call = find(fake)
         mismatched.append(call)
         completed = SteamAPICallCompleted_t(
-            m_hAsyncCall=handle, m_iCallback=LeaderboardFindResult_t.k_iCallback, m_cubParam=12
+            m_hAsyncCall=handle,
+            m_iCallback=LeaderboardFindResult_t.k_iCallback,
+            m_cubParam=ctypes.sizeof(LeaderboardFindResult_t) + 1,  # wrong under any packing
         )
         fake.post(SteamAPICallCompleted_t.k_iCallback, bytes(completed))
     with pytest.warns(SteamWarning, match="another SDK version") as warned:
