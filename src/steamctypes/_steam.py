@@ -1,10 +1,13 @@
 """Start and stop Steam."""
 
 import atexit
+import ctypes
 import os
 import threading
-from typing import Self
+from collections.abc import Callable
+from typing import Self, TypeVar
 
+from steamctypes._dispatch import CallResult, Dispatcher
 from steamctypes._generated import INIT_INTERFACE_VERSIONS, typedefs
 from steamctypes._generated.enums import ESteamAPIInitResult
 from steamctypes._loader import find_library, load_library
@@ -16,6 +19,9 @@ from steamctypes.errors import (
     VersionMismatchError,
 )
 
+T = TypeVar("T", bound=ctypes.Structure)
+R = TypeVar("R")
+
 # NUL-terminated version strings, ended by an empty one.
 _INIT_VERSIONS = b"".join(version.encode() + b"\0" for version in INIT_INTERFACE_VERSIONS) + b"\0"
 _INIT_ERRORS: dict[int, type[SteamInitError]] = {
@@ -24,8 +30,8 @@ _INIT_ERRORS: dict[int, type[SteamInitError]] = {
 }
 
 _lock = threading.Lock()
-# The library of the live session, if any.
-_active: Native | None = None
+# The dispatcher of the live session, if any. It holds the session's library.
+_active: Dispatcher | None = None
 # Valve does not document initializing again after a shutdown, so a process gets one session.
 _initialized = False
 
@@ -35,6 +41,15 @@ def _open_native(lib_path: str | os.PathLike[str] | None) -> Native:
     library = load_library(path)
     check_compatible(library, path)
     return Native(library)
+
+
+def call_result(handle: int, struct: type[T]) -> CallResult[T]:
+    """Wrap a SteamAPICall_t handle of the live session; for steamctypes internals."""
+    with _lock:
+        dispatcher = _active
+    if dispatcher is None:
+        raise SteamError("Steam is not initialized")
+    return dispatcher.call_result(handle, struct)
 
 
 class Steam:
@@ -54,10 +69,10 @@ class Steam:
                 text = message.value.decode("utf-8", errors="replace")
                 raise _INIT_ERRORS.get(result, SteamInitError)(result, text)
             native["SteamAPI_ManualDispatch_Init"]()
-            self._native: Native | None = native
             self._pipe: int = native["SteamAPI_GetHSteamPipe"]()
             self._user: int = native["SteamAPI_GetHSteamUser"]()
-            _active, _initialized = native, True
+            self._dispatcher: Dispatcher | None = Dispatcher(native, self._pipe)
+            _active, _initialized = self._dispatcher, True
             atexit.register(self.shutdown)
 
     @property
@@ -70,16 +85,44 @@ class Steam:
         """The HSteamUser handle."""
         return self._user
 
+    def run_callbacks(self) -> int:
+        """Deliver queued callbacks and call results; call it every frame.
+
+        Returns how many callbacks reached a subscriber or a call result. If handlers raise,
+        the rest of the frame is still delivered, then an ExceptionGroup is raised.
+        """
+        return self._live().run()
+
+    def on(self, struct: type[T]) -> Callable[[Callable[[T], R]], Callable[[T], R]]:
+        """Decorator that subscribes a handler to a callback struct; undo it with off()."""
+
+        def subscribe(handler: Callable[[T], R]) -> Callable[[T], R]:
+            self._live().subscribe(struct, handler)
+            return handler
+
+        return subscribe
+
+    def off(self, struct: type[T], handler: Callable[[T], object]) -> None:
+        self._live().unsubscribe(struct, handler)
+
     def shutdown(self) -> None:
         """Shut Steam down. Later calls do nothing."""
         global _active
         with _lock:
-            native, self._native = self._native, None
-            if native is None:
+            dispatcher = self._dispatcher
+            if dispatcher is None:
                 return
+            if dispatcher.in_handler():
+                raise SteamError("Steam cannot be shut down from inside a callback handler")
+            self._dispatcher = _active = None
             atexit.unregister(self.shutdown)
-            _active = None
-            native["SteamAPI_Shutdown"]()
+        dispatcher.close()
+        dispatcher.native["SteamAPI_Shutdown"]()
+
+    def _live(self) -> Dispatcher:
+        if self._dispatcher is None:
+            raise SteamError("Steam has been shut down")
+        return self._dispatcher
 
     def __enter__(self) -> Self:
         return self
@@ -91,5 +134,5 @@ class Steam:
 def restart_app_if_necessary(app_id: int, lib_path: str | os.PathLike[str] | None = None) -> bool:
     """Relaunch the game through Steam if needed. If this returns True, exit immediately."""
     with _lock:
-        native = _active if _active is not None else _open_native(lib_path)
+        native = _active.native if _active is not None else _open_native(lib_path)
     return bool(native["SteamAPI_RestartAppIfNecessary"](app_id))

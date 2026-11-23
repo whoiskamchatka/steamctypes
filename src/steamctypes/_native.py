@@ -2,6 +2,7 @@
 
 import ctypes
 import hashlib
+import sys
 import warnings
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -11,6 +12,20 @@ from steamctypes._generated import LIBRARY_SHA256, SDK_VERSION, typedefs
 from steamctypes._generated.functions import PROTOTYPES, Prototype
 from steamctypes._loader import library_name
 from steamctypes.errors import IncompatibleLibraryError, SteamWarning
+
+
+class CallbackMsg_t(ctypes.Structure):
+    """One queued callback, as manual dispatch hands it out (steam_api_internal.h)."""
+
+    _pack_ = 8 if sys.platform == "win32" else 4
+    _layout_ = "ms"
+    _fields_ = (
+        ("m_hSteamUser", typedefs.HSteamUser),
+        ("m_iCallback", ctypes.c_int),
+        ("m_pubParam", ctypes.c_void_p),
+        ("m_cubParam", ctypes.c_int),
+    )
+
 
 # The global functions are not in steam_api.json. Signatures from steam_api.h and
 # steam_api_internal.h; the init result is an ESteamAPIInitResult.
@@ -24,6 +39,23 @@ GLOBAL_PROTOTYPES: Final[Mapping[str, Prototype]] = {
     "SteamAPI_ManualDispatch_Init": (None, ()),
     "SteamAPI_GetHSteamPipe": (typedefs.HSteamPipe, ()),
     "SteamAPI_GetHSteamUser": (typedefs.HSteamUser, ()),
+    "SteamAPI_ManualDispatch_RunFrame": (None, (typedefs.HSteamPipe,)),
+    "SteamAPI_ManualDispatch_GetNextCallback": (
+        ctypes.c_bool,
+        (typedefs.HSteamPipe, ctypes.POINTER(CallbackMsg_t)),
+    ),
+    "SteamAPI_ManualDispatch_FreeLastCallback": (None, (typedefs.HSteamPipe,)),
+    "SteamAPI_ManualDispatch_GetAPICallResult": (
+        ctypes.c_bool,
+        (
+            typedefs.HSteamPipe,
+            typedefs.SteamAPICall_t,
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_bool),
+        ),
+    ),
 }
 _PROTOTYPES: Final[Mapping[str, Prototype]] = {**PROTOTYPES, **GLOBAL_PROTOTYPES}
 

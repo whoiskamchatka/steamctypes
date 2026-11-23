@@ -30,5 +30,13 @@ class VersionMismatchError(SteamInitError):
     """The running Steam client does not support the interface versions of this SDK."""
 
 
+class CallResultError(SteamError):
+    """An asynchronous Steam API call failed. `reason` is the ESteamAPICallFailure code."""
+
+    def __init__(self, reason: int) -> None:
+        super().__init__(f"the Steam API call failed with reason {reason}")
+        self.reason = reason
+
+
 class SteamWarning(UserWarning):
     """Something works but may misbehave, such as a steam_api library from another SDK version."""
