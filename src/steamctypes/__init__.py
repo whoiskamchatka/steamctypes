@@ -1,9 +1,13 @@
 from steamctypes._generated import SDK_VERSION
+from steamctypes._steam import Steam, restart_app_if_necessary
 from steamctypes.errors import (
     IncompatibleLibraryError,
     LibraryNotFoundError,
+    NoSteamClientError,
     SteamError,
+    SteamInitError,
     SteamWarning,
+    VersionMismatchError,
 )
 from steamctypes.types import SteamID
 
@@ -13,7 +17,12 @@ __all__ = [
     "SDK_VERSION",
     "IncompatibleLibraryError",
     "LibraryNotFoundError",
+    "NoSteamClientError",
+    "Steam",
     "SteamError",
     "SteamID",
+    "SteamInitError",
     "SteamWarning",
+    "VersionMismatchError",
+    "restart_app_if_necessary",
 ]
