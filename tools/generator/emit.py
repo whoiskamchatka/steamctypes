@@ -379,17 +379,24 @@ def _format(source: str, path: Path) -> str:
     return result.stdout.decode()
 
 
-def _init_module(lock: Lock) -> str:
-    libraries = {
-        PurePosixPath(path).name: digest
+def _mapping(items: Iterable[tuple[str, str]]) -> str:
+    return "{" + ", ".join(f'"{key}": "{value}"' for key, value in sorted(items)) + "}"
+
+
+def _init_module(api: Api, lock: Lock) -> str:
+    libraries = [
+        (PurePosixPath(path).name, digest)
         for path, digest in lock.sha256.items()
         if path.startswith(f"{REDIST_DIR}/")
-    }
-    entries = ", ".join(f'"{name}": "{digest}"' for name, digest in sorted(libraries.items()))
+    ]
+    versions = {i.name: i.version for i in api.interfaces}
+    init_versions = [f'"{versions[name]}"' for name in api.init_interfaces]
     lines = [
         f'SDK_VERSION: Final = "{lock.version}"',
         "# sha256 of the SDK's steam_api library for each platform, by file name.",
-        f"LIBRARY_SHA256: Final[Mapping[str, str]] = {{{entries}}}",
+        f"LIBRARY_SHA256: Final[Mapping[str, str]] = {_mapping(libraries)}",
+        "# The interface versions init asks the Steam client to support, in the SDK's order.",
+        f"INIT_INTERFACE_VERSIONS: Final[tuple[str, ...]] = {_tuple(init_versions)}",
     ]
     return _module(["from collections.abc import Mapping", "from typing import Final"], [], lines)
 
@@ -399,7 +406,7 @@ def generate(api: Api, lock: Lock) -> dict[str, str]:
     constants = {c.qualified_name: c.value for c in api.constants if isinstance(c.value, int)}
     constants |= {m.name: m.value for m in api.macros}
     emitters: dict[str, Callable[[], str]] = {
-        "__init__.py": lambda: _init_module(lock),
+        "__init__.py": lambda: _init_module(api, lock),
         "callbacks.py": lambda: _callbacks_module(api),
         "constants.py": lambda: _constants_module(api),
         "enums.py": lambda: _enums_module(api),
