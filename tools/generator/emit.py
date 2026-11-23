@@ -128,8 +128,7 @@ class _Refs:
             case Pointer(target=target):
                 return f"ctypes.POINTER({self.expression(target)})"
             case Array(element=element, length=length):
-                size = length if isinstance(length, int) else self.constants[length]
-                return f"{self.expression(element)} * {size}"
+                return f"{self.expression(element)} * {self.length(length)}"
             case FunctionPointer():
                 return "ctypes.c_void_p"
             case Union():
@@ -137,6 +136,18 @@ class _Refs:
 
     def returns(self, ctype: CType) -> str:
         return "None" if ctype == Primitive("void") else self.expression(ctype)
+
+    def field(self, ctype: CType) -> str:
+        # Pointers in structs point into memory Steam owns. As c_void_p they are read explicitly
+        # and losslessly; c_char_p would dereference on every access and stop at a zero byte.
+        if isinstance(ctype, Pointer):
+            return "ctypes.c_void_p"
+        if isinstance(ctype, Array):
+            return f"{self.field(ctype.element)} * {self.length(ctype.length)}"
+        return self.expression(ctype)
+
+    def length(self, length: int | str) -> int:
+        return length if isinstance(length, int) else self.constants[length]
 
 
 def _by_value_structs(ctype: CType) -> Iterator[str]:
@@ -234,7 +245,7 @@ def _struct_classes(api: Api, refs: _Refs) -> list[_Class]:
                 if any(m.name is None for m in field.type.members):
                     raise EmitError(f"{struct.qualified_name} has an unnamed union member")
                 members = tuple(
-                    (identifier(m.name or ""), refs.expression(m.type)) for m in field.type.members
+                    (identifier(m.name or ""), refs.field(m.type)) for m in field.type.members
                 )
                 member_depends = tuple(
                     d for m in field.type.members for d in _by_value_structs(m.type)
@@ -247,7 +258,7 @@ def _struct_classes(api: Api, refs: _Refs) -> list[_Class]:
             elif field.name is None:
                 raise EmitError(f"{struct.qualified_name} has an unnamed field that is not a union")
             else:
-                fields.append((identifier(field.name), refs.expression(field.type)))
+                fields.append((identifier(field.name), refs.field(field.type)))
                 depends += _by_value_structs(field.type)
         if struct.is_empty:
             fields = [("_padding", "ctypes.c_ubyte")]  # C++ gives an empty struct size 1
@@ -337,14 +348,14 @@ def _callbacks_module(api: Api) -> str:
     )
 
 
-def _prototype(function: Function, this: str, refs: _Refs) -> tuple[str, str, list[str]]:
-    args = [this, *(refs.expression(p.type) for p in function.params)]
+def _prototype(function: Function, this: str | None, refs: _Refs) -> tuple[str, str, list[str]]:
+    args = [*([this] if this else []), *(refs.expression(p.type) for p in function.params)]
     return function.flat_name, refs.returns(function.returns), args
 
 
 def _functions_module(api: Api, constants: Mapping[str, int]) -> str:
     refs = _Refs("typedefs.", "structs.", constants)
-    prototypes: list[tuple[str, str, list[str]]] = []
+    prototypes = [_prototype(f, None, refs) for f in api.global_functions]
     for interface in api.interfaces:
         prototypes += [(a.flat_name, "ctypes.c_void_p", []) for a in interface.accessors]
         prototypes += [_prototype(m, "ctypes.c_void_p", refs) for m in interface.methods]
@@ -360,8 +371,8 @@ def _functions_module(api: Api, constants: Mapping[str, int]) -> str:
         if i.accessors
     ]
     lines = [
-        "# restype and argtypes of every flat function and interface accessor. Interface and",
-        "# struct methods take the object pointer as their first argument.",
+        "# restype and argtypes of every global function, flat function and interface accessor.",
+        "# Interface and struct methods take the object pointer as their first argument.",
         "Prototype = tuple[type[Any] | None, tuple[type[Any], ...]]",
         "",
         "PROTOTYPES: Final[Mapping[str, Prototype]] = {" + ", ".join(entries) + "}",
@@ -394,7 +405,7 @@ def _mapping(items: Iterable[tuple[str, str]]) -> str:
 
 def _init_module(api: Api, lock: Lock) -> str:
     libraries = [
-        (PurePosixPath(path).name, digest)
+        (PurePosixPath(path).parent.name, digest)
         for path, digest in lock.sha256.items()
         if path.startswith(f"{REDIST_DIR}/")
     ]
@@ -402,7 +413,7 @@ def _init_module(api: Api, lock: Lock) -> str:
     init_versions = [f'"{versions[name]}"' for name in api.init_interfaces]
     lines = [
         f'SDK_VERSION: Final = "{lock.version}"',
-        "# sha256 of the SDK's steam_api library for each platform, by file name.",
+        "# sha256 of the SDK's steam_api library, by its redistributable_bin folder.",
         f"LIBRARY_SHA256: Final[Mapping[str, str]] = {_mapping(libraries)}",
         "# The interface versions init asks the Steam client to support, in the SDK's order.",
         f"INIT_INTERFACE_VERSIONS: Final[tuple[str, ...]] = {_tuple(init_versions)}",

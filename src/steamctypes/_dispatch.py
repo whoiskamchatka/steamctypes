@@ -10,10 +10,11 @@ from typing import Any, Generic, TypeVar
 
 from steamctypes._generated import SDK_VERSION
 from steamctypes._generated.callbacks import CALLBACKS
+from steamctypes._generated.constants import k_uAPICallInvalid
 from steamctypes._generated.enums import ESteamAPICallFailure
 from steamctypes._generated.functions import ACCESSORS
-from steamctypes._generated.structs import SteamAPICallCompleted_t
-from steamctypes._native import CallbackMsg_t, Native
+from steamctypes._generated.structs import CallbackMsg_t, SteamAPICallCompleted_t
+from steamctypes._native import Native
 from steamctypes.errors import CallResultError, SteamError, SteamWarning
 
 T = TypeVar("T", bound=ctypes.Structure)
@@ -122,7 +123,7 @@ class Dispatcher:
         if self._closed:
             raise SteamError("Steam has been shut down")
         pending = _Pending(struct)
-        if handle == 0:  # k_uAPICallInvalid
+        if handle == k_uAPICallInvalid:
             pending.finish(
                 None, CallResultError(ESteamAPICallFailure.k_ESteamAPICallFailureInvalidHandle)
             )

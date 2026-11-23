@@ -5,11 +5,37 @@ from typing import Any, Final
 
 from . import structs, typedefs
 
-# restype and argtypes of every flat function and interface accessor. Interface and
-# struct methods take the object pointer as their first argument.
+# restype and argtypes of every global function, flat function and interface accessor.
+# Interface and struct methods take the object pointer as their first argument.
 Prototype = tuple[type[Any] | None, tuple[type[Any], ...]]
 
 PROTOTYPES: Final[Mapping[str, Prototype]] = {
+    "SteamInternal_SteamAPI_Init": (
+        ctypes.c_int,
+        (ctypes.c_char_p, ctypes.POINTER(typedefs.SteamErrMsg)),
+    ),
+    "SteamAPI_Shutdown": (None, ()),
+    "SteamAPI_RestartAppIfNecessary": (ctypes.c_bool, (typedefs.uint32,)),
+    "SteamAPI_GetHSteamPipe": (typedefs.HSteamPipe, ()),
+    "SteamAPI_GetHSteamUser": (typedefs.HSteamUser, ()),
+    "SteamAPI_ManualDispatch_Init": (None, ()),
+    "SteamAPI_ManualDispatch_RunFrame": (None, (typedefs.HSteamPipe,)),
+    "SteamAPI_ManualDispatch_GetNextCallback": (
+        ctypes.c_bool,
+        (typedefs.HSteamPipe, ctypes.POINTER(structs.CallbackMsg_t)),
+    ),
+    "SteamAPI_ManualDispatch_FreeLastCallback": (None, (typedefs.HSteamPipe,)),
+    "SteamAPI_ManualDispatch_GetAPICallResult": (
+        ctypes.c_bool,
+        (
+            typedefs.HSteamPipe,
+            typedefs.SteamAPICall_t,
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_bool),
+        ),
+    ),
     "SteamAPI_ISteamClient_CreateSteamPipe": (typedefs.HSteamPipe, (ctypes.c_void_p,)),
     "SteamAPI_ISteamClient_BReleaseSteamPipe": (
         ctypes.c_bool,

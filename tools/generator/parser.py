@@ -270,6 +270,10 @@ class _Parser:
             if not isinstance(number, int):
                 self.problems.append(f"{path}: enum value {text!r} is not an integer")
                 continue
+            # The bindings store enums as c_int, so a wider value would read back differently.
+            if not -(2**31) <= number < 2**31:
+                self.problems.append(f"{path}: enum value {text!r} does not fit an int32")
+                continue
             values.append(EnumValue(self.text(entry, "name", path), number))
         self.enums.append(Enum(name, scope, tuple(values)))
 

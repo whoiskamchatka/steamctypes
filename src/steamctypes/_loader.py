@@ -2,6 +2,7 @@
 
 import ctypes
 import os
+import platform
 import sys
 from pathlib import Path
 
@@ -9,17 +10,36 @@ from steamctypes.errors import IncompatibleLibraryError, LibraryNotFoundError, S
 
 ENV_VAR = "STEAMCTYPES_LIB"
 
+# The SDK's redistributable_bin folder for sys.platform and the lower-case platform.machine().
+# The macOS library is universal.
+_FOLDERS = {
+    ("win32", "amd64"): "win64",
+    ("linux", "x86_64"): "linux64",
+    ("linux", "aarch64"): "linuxarm64",
+    ("darwin", "x86_64"): "osx",
+    ("darwin", "arm64"): "osx",
+}
+_NAMES = {
+    "win64": "steam_api64.dll",
+    "linux64": "libsteam_api.so",
+    "linuxarm64": "libsteam_api.so",
+    "osx": "libsteam_api.dylib",
+}
 
-def library_name() -> str:
+
+def library_folder() -> str:
+    """The redistributable_bin folder of the library this platform loads."""
     if sys.maxsize <= 2**32:
         raise SteamError("steamctypes needs a 64-bit Python")
-    if sys.platform == "win32":
-        return "steam_api64.dll"
-    if sys.platform.startswith("linux"):
-        return "libsteam_api.so"
-    if sys.platform == "darwin":
-        return "libsteam_api.dylib"
-    raise SteamError(f"steamctypes does not support the platform {sys.platform!r}")
+    machine = platform.machine()
+    folder = _FOLDERS.get((sys.platform, machine.lower()))
+    if folder is None:
+        raise SteamError(f"steamctypes does not support {sys.platform} on {machine}")
+    return folder
+
+
+def library_name() -> str:
+    return _NAMES[library_folder()]
 
 
 def _search_folders() -> list[Path]:

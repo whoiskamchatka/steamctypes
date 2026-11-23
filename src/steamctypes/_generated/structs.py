@@ -1379,6 +1379,11 @@ class SteamNetworkingIPAddr_IPv4MappedAddress(ctypes.Structure):
     _layout_ = "ms"
 
 
+class CallbackMsg_t(ctypes.Structure):
+    _pack_ = _PLATFORM_PACK
+    _layout_ = "ms"
+
+
 SteamIPAddress_t_union._fields_ = [
     ("m_unIPv4", typedefs.uint32),
     ("m_rgubIPv6", typedefs.uint8 * 16),
@@ -1430,7 +1435,7 @@ SteamPartyBeaconLocation_t._fields_ = [
     ("m_ulLocationID", typedefs.uint64),
 ]
 SteamParamStringArray_t._fields_ = [
-    ("m_ppStrings", ctypes.POINTER(ctypes.c_char_p)),
+    ("m_ppStrings", ctypes.c_void_p),
     ("m_nNumStrings", typedefs.int32),
 ]
 LeaderboardEntry_t._fields_ = [
@@ -1639,7 +1644,7 @@ SteamNetworkingConfigValue_t_m_val._fields_ = [
     ("m_int32", ctypes.c_int32),
     ("m_int64", ctypes.c_int64),
     ("m_float", ctypes.c_float),
-    ("m_string", ctypes.c_char_p),
+    ("m_string", ctypes.c_void_p),
     ("m_ptr", ctypes.c_void_p),
 ]
 SteamNetworkingConfigValue_t._fields_ = [
@@ -2234,7 +2239,7 @@ WorkshopEULAStatus_t._fields_ = [
 HTML_BrowserReady_t._fields_ = [("unBrowserHandle", typedefs.HHTMLBrowser)]
 HTML_NeedsPaint_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pBGRA", ctypes.c_char_p),
+    ("pBGRA", ctypes.c_void_p),
     ("unWide", typedefs.uint32),
     ("unTall", typedefs.uint32),
     ("unUpdateX", typedefs.uint32),
@@ -2248,32 +2253,32 @@ HTML_NeedsPaint_t._fields_ = [
 ]
 HTML_StartRequest_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchURL", ctypes.c_char_p),
-    ("pchTarget", ctypes.c_char_p),
-    ("pchPostData", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
+    ("pchTarget", ctypes.c_void_p),
+    ("pchPostData", ctypes.c_void_p),
     ("bIsRedirect", ctypes.c_bool),
 ]
 HTML_CloseBrowser_t._fields_ = [("unBrowserHandle", typedefs.HHTMLBrowser)]
 HTML_URLChanged_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchURL", ctypes.c_char_p),
-    ("pchPostData", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
+    ("pchPostData", ctypes.c_void_p),
     ("bIsRedirect", ctypes.c_bool),
-    ("pchPageTitle", ctypes.c_char_p),
+    ("pchPageTitle", ctypes.c_void_p),
     ("bNewNavigation", ctypes.c_bool),
 ]
 HTML_FinishedRequest_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchURL", ctypes.c_char_p),
-    ("pchPageTitle", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
+    ("pchPageTitle", ctypes.c_void_p),
 ]
 HTML_OpenLinkInNewTab_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchURL", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
 ]
 HTML_ChangedTitle_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchTitle", ctypes.c_char_p),
+    ("pchTitle", ctypes.c_void_p),
 ]
 HTML_SearchResults_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
@@ -2305,26 +2310,26 @@ HTML_LinkAtPosition_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
     ("x", typedefs.uint32),
     ("y", typedefs.uint32),
-    ("pchURL", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
     ("bInput", ctypes.c_bool),
     ("bLiveLink", ctypes.c_bool),
 ]
 HTML_JSAlert_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchMessage", ctypes.c_char_p),
+    ("pchMessage", ctypes.c_void_p),
 ]
 HTML_JSConfirm_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchMessage", ctypes.c_char_p),
+    ("pchMessage", ctypes.c_void_p),
 ]
 HTML_FileOpenDialog_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchTitle", ctypes.c_char_p),
-    ("pchInitialFile", ctypes.c_char_p),
+    ("pchTitle", ctypes.c_void_p),
+    ("pchInitialFile", ctypes.c_void_p),
 ]
 HTML_NewWindow_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchURL", ctypes.c_char_p),
+    ("pchURL", ctypes.c_void_p),
     ("unX", typedefs.uint32),
     ("unY", typedefs.uint32),
     ("unWide", typedefs.uint32),
@@ -2337,15 +2342,15 @@ HTML_SetCursor_t._fields_ = [
 ]
 HTML_StatusText_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchMsg", ctypes.c_char_p),
+    ("pchMsg", ctypes.c_void_p),
 ]
 HTML_ShowToolTip_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchMsg", ctypes.c_char_p),
+    ("pchMsg", ctypes.c_void_p),
 ]
 HTML_UpdateToolTip_t._fields_ = [
     ("unBrowserHandle", typedefs.HHTMLBrowser),
-    ("pchMsg", ctypes.c_char_p),
+    ("pchMsg", ctypes.c_void_p),
 ]
 HTML_HideToolTip_t._fields_ = [("unBrowserHandle", typedefs.HHTMLBrowser)]
 HTML_BrowserRestarted_t._fields_ = [
@@ -2473,4 +2478,10 @@ SteamNetworkingFakeIPResult_t._fields_ = [
     ("m_identity", SteamNetworkingIdentity),
     ("m_unIP", typedefs.uint32),
     ("m_unPorts", typedefs.uint16 * 8),
+]
+CallbackMsg_t._fields_ = [
+    ("m_hSteamUser", typedefs.HSteamUser),
+    ("m_iCallback", ctypes.c_int),
+    ("m_pubParam", ctypes.c_void_p),
+    ("m_cubParam", ctypes.c_int),
 ]

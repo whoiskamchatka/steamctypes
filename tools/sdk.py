@@ -19,6 +19,7 @@ LOCKED_FILES = (
     JSON_PATH,
     f"{REDIST_DIR}/win64/steam_api64.dll",
     f"{REDIST_DIR}/linux64/libsteam_api.so",
+    f"{REDIST_DIR}/linuxarm64/libsteam_api.so",
     f"{REDIST_DIR}/osx/libsteam_api.dylib",
 )
 

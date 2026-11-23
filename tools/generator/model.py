@@ -217,6 +217,8 @@ class Api:
     init_interfaces: tuple[str, ...] = ()
     # Game server structs that share their callback id with a user struct.
     game_server_callbacks: tuple[str, ...] = ()
+    # Exported functions steam_api.json does not describe, such as init and manual dispatch.
+    global_functions: tuple[Function, ...] = ()
 
     @property
     def callbacks(self) -> tuple[Struct, ...]:
@@ -258,6 +260,7 @@ def map_types(api: Api, convert: Callable[[CType, str], CType]) -> Api:
         constants=tuple(
             replace(c, type=convert(c.type, f"constant {c.qualified_name}")) for c in api.constants
         ),
+        global_functions=tuple(map(function, api.global_functions)),
     )
 
 
