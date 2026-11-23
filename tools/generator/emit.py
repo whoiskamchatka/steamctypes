@@ -306,7 +306,9 @@ def _structs_module(api: Api, constants: Mapping[str, int]) -> str:
 def _callbacks_module(api: Api) -> str:
     by_id: dict[int, list[str]] = {}
     layouts: dict[int, set[tuple[object, ...]]] = {}
-    for struct in api.callbacks:
+    # User structs first: a sorted() key of False puts them before the game server ones.
+    callbacks = sorted(api.callbacks, key=lambda s: s.name in api.game_server_callbacks)
+    for struct in callbacks:
         assert struct.callback_id is not None
         by_id.setdefault(struct.callback_id, []).append(identifier(struct.qualified_name))
         layouts.setdefault(struct.callback_id, set()).add(
@@ -322,8 +324,8 @@ def _callbacks_module(api: Api) -> str:
         for callback_id, names in sorted(by_id.items())
     ]
     lines = [
-        "# Every id maps to a tuple: a few ids are shared by user and game server structs with the",
-        "# same layout.",
+        "# Every id maps to a tuple. An id shared by a user and a game server struct lists the",
+        "# user struct first; both have the same layout.",
         "CALLBACKS: Final[Mapping[int, tuple[type[ctypes.Structure], ...]]] = {"
         + ", ".join(entries)
         + "}",
@@ -352,12 +354,19 @@ def _functions_module(api: Api, constants: Mapping[str, int]) -> str:
     _check_unique((name for name, _, _ in prototypes), "prototypes")
 
     entries = [f"{name!r}: ({restype}, {_tuple(args)})" for name, restype, args in prototypes]
+    accessors = [
+        f'"{i.name}": {_mapping((a.kind.value, a.flat_name) for a in i.accessors)}'
+        for i in sorted(api.interfaces, key=lambda i: i.name)
+        if i.accessors
+    ]
     lines = [
         "# restype and argtypes of every flat function and interface accessor. Interface and",
         "# struct methods take the object pointer as their first argument.",
         "Prototype = tuple[type[Any] | None, tuple[type[Any], ...]]",
         "",
         "PROTOTYPES: Final[Mapping[str, Prototype]] = {" + ", ".join(entries) + "}",
+        "# The accessor of each interface by kind: user, gameserver or global.",
+        "ACCESSORS: Final[Mapping[str, Mapping[str, str]]] = {" + ", ".join(accessors) + "}",
     ]
     return _module(
         ["import ctypes", "from collections.abc import Mapping", "from typing import Any, Final"],

@@ -29,6 +29,7 @@ OVERRIDES_PATH = Path(__file__).with_name("overrides.toml")
 SECTIONS = frozenset(
     {
         "flag_enums",
+        "game_server_callbacks",
         "init_interfaces",
         "macros",
         "pack",
@@ -71,6 +72,7 @@ class _Applier:
         self.opaques: list[Opaque] = []
         self.macros: list[Macro] = []
         self.init_interfaces: list[str] = []
+        self.game_server_callbacks: list[str] = []
 
     def table(
         self,
@@ -272,6 +274,32 @@ class _Applier:
             else:
                 self.init_interfaces.append(name)
 
+    def game_server_callback_names(self, names: object) -> None:
+        if not isinstance(names, list):
+            self.problems.append("game_server_callbacks: expected a list of struct names")
+            return
+        by_id: dict[int, list[str]] = {}
+        for struct in self.structs.values():
+            if struct.callback_id is not None:
+                by_id.setdefault(struct.callback_id, []).append(struct.name)
+        for name in cast(list[Any], names):
+            struct = self.structs.get(name)
+            if struct is None or struct.callback_id is None:
+                self.problems.append(f"game_server_callbacks: no callback struct {name}")
+            elif len(by_id[struct.callback_id]) < 2:
+                self.problems.append(f"game_server_callbacks: {name} shares no callback id")
+            elif name in self.game_server_callbacks:
+                self.problems.append(f"game_server_callbacks: {name} is listed twice")
+            else:
+                self.game_server_callbacks.append(name)
+        for callback_id, sharing in sorted(by_id.items()):
+            user = [n for n in sharing if n not in self.game_server_callbacks]
+            if len(sharing) > 1 and len(user) != 1:
+                self.problems.append(
+                    f"game_server_callbacks: callback id {callback_id} is shared by "
+                    f"{', '.join(sharing)}; list every one but the user struct"
+                )
+
     def result(self) -> Api:
         return replace(
             self.api,
@@ -282,6 +310,7 @@ class _Applier:
             opaques=tuple(self.opaques),
             macros=tuple(self.macros),
             init_interfaces=tuple(self.init_interfaces),
+            game_server_callbacks=tuple(self.game_server_callbacks),
         )
 
     def check_used(self, api: Api) -> None:
@@ -318,6 +347,7 @@ def apply_overrides(api: Api, overrides: Mapping[str, Any]) -> Api:
     applier.annotations(overrides.get("annotations", {}))
     applier.unsupported(overrides.get("unsupported", {}))
     applier.init_interface_names(overrides.get("init_interfaces", []))
+    applier.game_server_callback_names(overrides.get("game_server_callbacks", []))
     result = applier.result()
     applier.check_used(result)
     if applier.problems:
