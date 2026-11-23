@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable
 from typing import Self, TypeVar
 
-from steamctypes._dispatch import CallResult, Dispatcher
+from steamctypes._dispatch import CallResult, Dispatcher, callback_id_of
 from steamctypes._generated import INIT_INTERFACE_VERSIONS, typedefs
 from steamctypes._generated.enums import ESteamAPIInitResult
 from steamctypes._loader import find_library, load_library
@@ -43,13 +43,13 @@ def _open_native(lib_path: str | os.PathLike[str] | None) -> Native:
     return Native(library)
 
 
-def call_result(handle: int, struct: type[T]) -> CallResult[T]:
-    """Wrap a SteamAPICall_t handle of the live session; for steamctypes internals."""
+def async_call(function: str, struct: type[T], *args: object) -> CallResult[T]:
+    """Call a flat function that returns a SteamAPICall_t; for steamctypes internals."""
     with _lock:
         dispatcher = _active
     if dispatcher is None:
         raise SteamError("Steam is not initialized")
-    return dispatcher.call_result(handle, struct)
+    return dispatcher.async_call(function, struct, *args)
 
 
 class Steam:
@@ -73,7 +73,7 @@ class Steam:
             self._user: int = native["SteamAPI_GetHSteamUser"]()
             self._dispatcher: Dispatcher | None = Dispatcher(native, self._pipe)
             _active, _initialized = self._dispatcher, True
-            atexit.register(self.shutdown)
+            atexit.register(self._shut_down)
 
     @property
     def pipe(self) -> int:
@@ -89,12 +89,18 @@ class Steam:
         """Deliver queued callbacks and call results; call it every frame.
 
         Returns how many callbacks reached a subscriber or a call result. If handlers raise,
-        the rest of the frame is still delivered, then an ExceptionGroup is raised.
+        the rest of the frame is still delivered, then an ExceptionGroup is raised. A frame
+        running on another thread, for example in CallResult.wait(), finishes first.
         """
         return self._live().run()
 
     def on(self, struct: type[T]) -> Callable[[Callable[[T], R]], Callable[[T], R]]:
-        """Decorator that subscribes a handler to a callback struct; undo it with off()."""
+        """Decorator that subscribes a handler to a callback struct; undo it with off().
+
+        Pointer fields in the struct are valid only while the handler runs.
+        Handlers run on the thread that runs the frame, possibly one blocked in CallResult.wait().
+        """
+        callback_id_of(struct)
 
         def subscribe(handler: Callable[[T], R]) -> Callable[[T], R]:
             self._live().subscribe(struct, handler)
@@ -106,18 +112,37 @@ class Steam:
         self._live().unsubscribe(struct, handler)
 
     def shutdown(self) -> None:
-        """Shut Steam down. Later calls do nothing."""
+        """Shut Steam down. Later calls do nothing.
+
+        Pending call results fail with SteamError and their done callbacks run afterwards; if
+        any of them raise, an ExceptionGroup is raised.
+        """
+        errors: list[Exception] = []
+        for callback in self._shut_down():
+            try:
+                callback()
+            except Exception as error:
+                errors.append(error)
+        if errors:
+            raise ExceptionGroup("done callbacks raised exceptions", errors)
+
+    def _shut_down(self) -> list[Callable[[], object]]:
+        """Shut down and return the done callbacks of the failed calls, without running them.
+
+        This is the atexit hook: user code must not run while the interpreter exits.
+        """
         global _active
         with _lock:
             dispatcher = self._dispatcher
             if dispatcher is None:
-                return
+                return []
             if dispatcher.in_handler():
                 raise SteamError("Steam cannot be shut down from inside a callback handler")
             self._dispatcher = _active = None
-            atexit.unregister(self.shutdown)
-        dispatcher.close()
+            atexit.unregister(self._shut_down)
+        callbacks = dispatcher.close()
         dispatcher.native["SteamAPI_Shutdown"]()
+        return callbacks
 
     def _live(self) -> Dispatcher:
         if self._dispatcher is None:

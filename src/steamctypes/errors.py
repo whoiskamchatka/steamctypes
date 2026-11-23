@@ -33,8 +33,8 @@ class VersionMismatchError(SteamInitError):
 class CallResultError(SteamError):
     """An asynchronous Steam API call failed. `reason` is the ESteamAPICallFailure code."""
 
-    def __init__(self, reason: int) -> None:
-        super().__init__(f"the Steam API call failed with reason {reason}")
+    def __init__(self, reason: int, message: str | None = None) -> None:
+        super().__init__(message or f"the Steam API call failed with reason {reason}")
         self.reason = reason
 
 
